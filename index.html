@@ -58,12 +58,12 @@
       <button id="refocusBtn" type="button">🎯 ピントを再調整</button>
     </div>
     <button id="stopBtn" style="display:none;">カメラを停止</button>
-    <div id="status" aria-live="polite">読み取り距離の目安：10～20cm</div>
+    <div id="status" aria-live="polite">バーコードが画面の横幅の8割ほどになる距離（15～25cm）で、ピントが合うまで1秒ほど止めてください</div>
     <p class="footnote">※ 赤い枠は読み取り範囲の目安です。範囲内に別のバーコードを入れないでください。</p>
   </div>
 
   <div id="resultCard" class="card">
-    <div class="ok">✓ 読み取り成功（3回一致）</div>
+    <div class="ok">✓ 読み取り成功</div>
     <div class="result" id="resultText"></div>
     <button id="againBtn" class="primary">もう一度読み取る</button>
   </div>
@@ -102,7 +102,8 @@ const cameraButtons = document.getElementById('cameraButtons');
 const torchBtn = document.getElementById('torchBtn');
 const refocusBtn = document.getElementById('refocusBtn');
 
-const RANGE_RATIO = { narrow: 0.62, standard: 0.80, wide: 0.94 };
+const RANGE_RATIO = { narrow: 0.80, standard: 0.92, wide: 0.98 };
+const CONFIRM_COUNT = 2; // 連続一致の回数（1にすると最速、2で誤読をほぼ防止）
 const BARCODE_PATTERN = /^[A-Z]{2}[0-9]{4}-[0-9]{9}$/;
 
 function loadHistory() {
@@ -209,22 +210,32 @@ async function startScan() {
     await scanner.start(
       { facingMode: 'environment' },
       {
-        fps: 12,
+        fps: 20,
         qrbox: (viewfinderWidth, viewfinderHeight) => {
           const ratio = RANGE_RATIO[selectedRange] || RANGE_RATIO.standard;
-          const width = Math.max(160, Math.floor(Math.min(viewfinderWidth - 16, viewfinderWidth * ratio)));
-          const height = Math.max(70, Math.min(96, Math.floor(viewfinderHeight * 0.30)));
+          const width = Math.max(160, Math.floor(Math.min(viewfinderWidth - 8, viewfinderWidth * ratio)));
+          const height = Math.max(80, Math.min(140, Math.floor(viewfinderHeight * 0.40)));
           setGuideSize(width, height);
           return { width, height };
         },
         formatsToSupport: [Html5QrcodeSupportedFormats.CODE_39],
+        // 対応ブラウザ（Android Chrome等）ではOS標準の高精度バーコード検出を使う
+        experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+        // 細かいバーを読むため、高解像度で撮影する（既定は低解像度で読めない原因）
+        videoConstraints: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        },
         disableFlip: true
       },
       decodedText => {
         if (confirmed) return;
+        // Code 39 の読取結果に前後の空白や '*' が付く場合に備えて整形
+        decodedText = decodedText.trim().replace(/^\*|\*$/g, '');
         if (!BARCODE_PATTERN.test(decodedText)) {
           resetCandidate();
-          statusEl.textContent = '形式が一致しません。AA0000-000000000 の形式のバーコードを枠内に合わせてください。';
+          statusEl.textContent = '形式が一致しません（読取値: ' + decodedText + '）。AA0000-000000000 の形式のバーコードだけを枠内に入れてください。';
           return;
         }
         if (decodedText === candidateValue) {
@@ -233,8 +244,8 @@ async function startScan() {
           candidateValue = decodedText;
           candidateCount = 1;
         }
-        statusEl.textContent = '読み取り候補を確認中… ' + candidateCount + '/3 回一致';
-        if (candidateCount >= 3) {
+        statusEl.textContent = '読み取り候補を確認中… ' + candidateCount + '/' + CONFIRM_COUNT + ' 回一致';
+        if (candidateCount >= CONFIRM_COUNT) {
           confirmed = true;
           const value = candidateValue;
           stopScan().then(() => {
