@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0868d5">
+<title>Code 39 バーコード読取</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #f4f7fb; color: #222; }
+  header { background: #0868d5; color: white; padding: 16px; text-align: center; font-size: 21px; font-weight: 700; }
+  main { max-width: 560px; margin: 0 auto; padding: 14px; }
+  button, select { font: inherit; }
+  button { width: 100%; border: 0; border-radius: 10px; padding: 13px 12px; font-size: 17px; font-weight: 700; cursor: pointer; }
+  button:disabled { opacity: .55; cursor: wait; }
+  #startBtn, .primary { background: #0868d5; color: white; }
+  #stopBtn { background: #777; color: white; margin-top: 9px; }
+  .card { background: white; border-radius: 12px; padding: 16px; margin-top: 14px; box-shadow: 0 2px 8px #0001; }
+  .notice { font-size: 14px; color: #555; line-height: 1.7; }
+  .setting-title { display: block; font-weight: 700; margin: 14px 0 8px; }
+  .range-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+  .range-options button { padding: 10px 4px; font-size: 14px; border: 1px solid #c9d7e8; color: #24415e; background: #f8fbff; }
+  .range-options button.selected { background: #dcecff; border: 2px solid #0868d5; color: #064d9f; }
+  #cameraView { display: none; position: relative; width: 100%; margin-top: 14px; background: #000; border-radius: 12px; overflow: hidden; min-height: 180px; }
+  #reader { width: 100%; background: #000; overflow: hidden; min-height: 180px; }
+  #reader video { width: 100% !important; height: auto !important; object-fit: cover; }
+  #reader canvas { max-width: 100%; }
+  #scanGuide { position: absolute; z-index: 10; left: 50%; top: 50%; width: 82%; height: 90px; transform: translate(-50%, -50%); border: 2px solid rgba(255,255,255,.8); border-radius: 8px; pointer-events: none; box-shadow: 0 0 0 9999px rgba(0,0,0,.13); }
+  #scanGuide::after { content: ""; position: absolute; top: 50%; left: 0; right: 0; height: 3px; transform: translateY(-50%); background: #ff3030; box-shadow: 0 0 6px #ff0000; }
+  #guideLabel { position: absolute; z-index: 11; left: 50%; top: calc(50% + 55px); transform: translateX(-50%); white-space: nowrap; color: white; background: #000a; border-radius: 5px; padding: 3px 8px; font-size: 12px; pointer-events: none; }
+  .camera-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 9px; }
+  .camera-buttons button { font-size: 14px; padding: 10px 6px; background: #e8eef5; color: #25364a; }
+  #status { text-align: center; margin-top: 12px; color: #555; min-height: 24px; line-height: 1.5; font-size: 14px; }
+  #resultCard { display: none; }
+  .ok { color: #16853a; background: #eaf8ef; border-radius: 10px; padding: 12px; text-align: center; font-weight: 700; }
+  .result { font-size: clamp(24px, 7vw, 32px); font-weight: 800; word-break: break-all; text-align: center; padding: 16px 5px; }
+  .history-item { padding: 10px 0; border-bottom: 1px solid #ddd; word-break: break-all; }
+  .small { font-size: 12px; color: #777; }
+  .footnote { font-size: 12px; color: #777; line-height: 1.6; }
+  .rule { height: 1px; background: #e5e9ef; margin: 14px 0; }
+</style>
+</head>
+<body>
+<header>Code 39 バーコード読取</header>
+<main>
+  <div class="card">
+    <p class="notice">工程移動票のCode 39バーコードを読み取ります。<b>赤い線をバーコードの中央に合わせ、枠の中に1つだけ入れてください。</b></p>
+    <label class="setting-title">読み取り範囲</label>
+    <div class="range-options" role="group" aria-label="読み取り範囲">
+      <button type="button" data-range="narrow">狭い</button>
+      <button type="button" data-range="standard" class="selected">標準</button>
+      <button type="button" data-range="wide">広い</button>
+    </div>
+    <button id="startBtn" style="margin-top:14px;">📷 カメラで読み取る</button>
+    <div id="cameraView"><div id="reader"></div><div id="scanGuide"></div><div id="guideLabel">バーコードを赤線に合わせる</div></div>
+    <div class="camera-buttons" id="cameraButtons" style="display:none;">
+      <button id="torchBtn" type="button" style="display:none;">🔦 ライトを点灯</button>
+      <button id="refocusBtn" type="button">🎯 ピントを再調整</button>
+    </div>
+    <button id="stopBtn" style="display:none;">カメラを停止</button>
+    <div id="status" aria-live="polite">読み取り距離の目安：10～20cm</div>
+    <p class="footnote">※ 赤い枠は読み取り範囲の目安です。範囲内に別のバーコードを入れないでください。</p>
+  </div>
+
+  <div id="resultCard" class="card">
+    <div class="ok">✓ 読み取り成功（3回一致）</div>
+    <div class="result" id="resultText"></div>
+    <button id="againBtn" class="primary">もう一度読み取る</button>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0;">確定した読み取り履歴</h3>
+    <div id="history"></div>
+    <div class="rule"></div>
+    <p class="notice">※ 履歴はこのスマートフォンのブラウザ内に保存されます。別の端末やブラウザとは共有されません。</p>
+    <button id="clearHistoryBtn" type="button" style="background:#eef1f5;color:#444;font-size:14px;padding:10px;">履歴をすべて削除</button>
+  </div>
+</main>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+'use strict';
+let scanner = null;
+let scanning = false;
+let selectedRange = 'standard';
+let candidateValue = '';
+let candidateCount = 0;
+let confirmed = false;
+let torchOn = false;
+
+const reader = document.getElementById('reader');
+const cameraView = document.getElementById('cameraView');
+const scanGuide = document.getElementById('scanGuide');
+const guideLabel = document.getElementById('guideLabel');
+const statusEl = document.getElementById('status');
+const resultCard = document.getElementById('resultCard');
+const resultText = document.getElementById('resultText');
+const historyEl = document.getElementById('history');
+const startBtn = document.getElementById('startBtn');
+const stopBtn = document.getElementById('stopBtn');
+const cameraButtons = document.getElementById('cameraButtons');
+const torchBtn = document.getElementById('torchBtn');
+const refocusBtn = document.getElementById('refocusBtn');
+
+const RANGE_RATIO = { narrow: 0.62, standard: 0.80, wide: 0.94 };
+const BARCODE_PATTERN = /^[A-Z]{2}[0-9]{4}-[0-9]{9}$/;
+
+function loadHistory() {
+  let items = [];
+  try { items = JSON.parse(localStorage.getItem('code39_history') || '[]'); } catch (e) { items = []; }
+  historyEl.innerHTML = '';
+  if (!items.length) {
+    historyEl.innerHTML = '<div class="notice">まだ確定した読み取り結果はありません。</div>';
+    return;
+  }
+  items.forEach(item => {
+    const div = document.createElement('div');
+    div.className = 'history-item';
+    const value = document.createElement('b');
+    value.textContent = item.value;
+    const br = document.createElement('br');
+    const time = document.createElement('span');
+    time.className = 'small';
+    time.textContent = item.time;
+    div.append(value, br, time);
+    historyEl.appendChild(div);
+  });
+}
+
+function saveValue(value) {
+  let items = [];
+  try { items = JSON.parse(localStorage.getItem('code39_history') || '[]'); } catch (e) { items = []; }
+  items.unshift({ value, time: new Date().toLocaleString('ja-JP') });
+  try { localStorage.setItem('code39_history', JSON.stringify(items.slice(0, 100))); } catch (e) {}
+  loadHistory();
+}
+
+function resetCandidate() {
+  candidateValue = '';
+  candidateCount = 0;
+}
+
+function updateRangeButtons() {
+  document.querySelectorAll('[data-range]').forEach(button => {
+    button.classList.toggle('selected', button.dataset.range === selectedRange);
+  });
+}
+
+function setGuideSize(width, height) {
+  scanGuide.style.width = width + 'px';
+  scanGuide.style.height = height + 'px';
+  guideLabel.style.top = 'calc(50% + ' + (height / 2 + 7) + 'px)';
+}
+
+async function tryContinuousFocus() {
+  if (!scanner || !scanning || typeof scanner.applyVideoConstraints !== 'function') return;
+  try {
+    await scanner.applyVideoConstraints({ advanced: [{ focusMode: 'continuous' }] });
+    statusEl.textContent = 'カメラ起動中です。赤線に合わせてください。';
+  } catch (e) {
+    // Some Android phones/browser versions do not expose focus controls.
+  }
+}
+
+async function updateTorchAvailability() {
+  torchBtn.style.display = 'none';
+  if (!scanner || typeof scanner.getRunningTrackCameraCapabilities !== 'function') return;
+  try {
+    const capabilities = scanner.getRunningTrackCameraCapabilities();
+    if (capabilities && capabilities.torch !== undefined) {
+      torchBtn.style.display = 'block';
+      torchBtn.textContent = torchOn ? '🔦 ライトを消灯' : '🔦 ライトを点灯';
+    }
+  } catch (e) {}
+}
+
+async function toggleTorch() {
+  if (!scanner || typeof scanner.applyVideoConstraints !== 'function') return;
+  const nextState = !torchOn;
+  try {
+    await scanner.applyVideoConstraints({ advanced: [{ torch: nextState }] });
+    torchOn = nextState;
+    torchBtn.textContent = torchOn ? '🔦 ライトを消灯' : '🔦 ライトを点灯';
+  } catch (e) {
+    statusEl.textContent = 'このスマホではライトを操作できません。';
+  }
+}
+
+async function startScan() {
+  if (scanning) return;
+  if (typeof Html5Qrcode === 'undefined') {
+    statusEl.textContent = '読み取り機能を読み込めません。インターネット接続を確認してください。';
+    return;
+  }
+  resultCard.style.display = 'none';
+  cameraView.style.display = 'block';
+  startBtn.style.display = 'none';
+  stopBtn.style.display = 'block';
+  cameraButtons.style.display = 'grid';
+  torchBtn.style.display = 'none';
+  torchOn = false;
+  resetCandidate();
+  confirmed = false;
+  statusEl.textContent = 'カメラを起動しています…';
+  scanner = new Html5Qrcode('reader', { verbose: false });
+  scanning = true;
+
+  try {
+    await scanner.start(
+      { facingMode: 'environment' },
+      {
+        fps: 12,
+        qrbox: (viewfinderWidth, viewfinderHeight) => {
+          const ratio = RANGE_RATIO[selectedRange] || RANGE_RATIO.standard;
+          const width = Math.max(160, Math.floor(Math.min(viewfinderWidth - 16, viewfinderWidth * ratio)));
+          const height = Math.max(70, Math.min(96, Math.floor(viewfinderHeight * 0.30)));
+          setGuideSize(width, height);
+          return { width, height };
+        },
+        formatsToSupport: [Html5QrcodeSupportedFormats.CODE_39],
+        disableFlip: true
+      },
+      decodedText => {
+        if (confirmed) return;
+        if (!BARCODE_PATTERN.test(decodedText)) {
+          resetCandidate();
+          statusEl.textContent = '形式が一致しません。AA0000-000000000 の形式のバーコードを枠内に合わせてください。';
+          return;
+        }
+        if (decodedText === candidateValue) {
+          candidateCount += 1;
+        } else {
+          candidateValue = decodedText;
+          candidateCount = 1;
+        }
+        statusEl.textContent = '読み取り候補を確認中… ' + candidateCount + '/3 回一致';
+        if (candidateCount >= 3) {
+          confirmed = true;
+          const value = candidateValue;
+          stopScan().then(() => {
+            resultText.textContent = value;
+            resultCard.style.display = 'block';
+            statusEl.textContent = '';
+            saveValue(value);
+          });
+        }
+      },
+      () => { /* 途中の未検出メッセージは表示しません */ }
+    );
+    await tryContinuousFocus();
+    await updateTorchAvailability();
+    if (!statusEl.textContent || statusEl.textContent === 'カメラを起動しています…') {
+      statusEl.textContent = '赤い線をバーコードの中央に合わせてください。';
+    }
+  } catch (e) {
+    scanning = false;
+    try { if (scanner) await scanner.clear(); } catch (err) {}
+    scanner = null;
+    cameraView.style.display = 'none';
+    cameraButtons.style.display = 'none';
+    startBtn.style.display = 'block';
+    stopBtn.style.display = 'none';
+    statusEl.textContent = 'カメラを使用できません。HTTPSで開いているか、ブラウザのカメラ使用が許可されているか確認してください。';
+  }
+}
+
+async function stopScan() {
+  if (scanner && scanning) {
+    try { await scanner.stop(); } catch (e) {}
+    try { await scanner.clear(); } catch (e) {}
+  }
+  scanning = false;
+  scanner = null;
+  cameraView.style.display = 'none';
+  cameraButtons.style.display = 'none';
+  startBtn.style.display = 'block';
+  stopBtn.style.display = 'none';
+  torchOn = false;
+}
+
+async function refocus() {
+  if (!scanner || !scanning || typeof scanner.applyVideoConstraints !== 'function') {
+    statusEl.textContent = 'カメラを起動してから操作してください。';
+    return;
+  }
+  try {
+    await scanner.applyVideoConstraints({ advanced: [{ focusMode: 'continuous' }] });
+    statusEl.textContent = 'ピント調整をリクエストしました。バーコードを少し動かして再度合わせてください。';
+  } catch (e) {
+    statusEl.textContent = 'このスマホでは手動のピント調整に対応していません。カメラを少し前後に動かしてみてください。';
+  }
+}
+
+document.querySelectorAll('[data-range]').forEach(button => {
+  button.addEventListener('click', () => {
+    selectedRange = button.dataset.range;
+    updateRangeButtons();
+    if (scanning) statusEl.textContent = '範囲の変更は次回の読み取り開始時に反映されます。';
+  });
+});
+startBtn.addEventListener('click', startScan);
+stopBtn.addEventListener('click', stopScan);
+document.getElementById('againBtn').addEventListener('click', startScan);
+torchBtn.addEventListener('click', toggleTorch);
+refocusBtn.addEventListener('click', refocus);
+document.getElementById('clearHistoryBtn').addEventListener('click', () => {
+  if (confirm('このスマートフォンに保存された読み取り履歴をすべて削除しますか？')) {
+    localStorage.removeItem('code39_history');
+    loadHistory();
+  }
+});
+window.addEventListener('pagehide', () => {
+  if (scanner && scanning) { try { scanner.stop(); } catch (e) {} }
+});
+loadHistory();
+</script>
+</body>
+</html>
