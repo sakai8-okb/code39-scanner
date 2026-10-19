@@ -103,7 +103,7 @@ const torchBtn = document.getElementById('torchBtn');
 const refocusBtn = document.getElementById('refocusBtn');
 
 const RANGE_RATIO = { narrow: 0.80, standard: 0.92, wide: 0.98 };
-const CONFIRM_COUNT = 2; // 連続一致の回数（1にすると最速、2で誤読をほぼ防止）
+const CONFIRM_COUNT = 1; // 一致の回数。1＝形式（AA0000-000000000）に合った読取値が出た時点で即確定
 const BARCODE_PATTERN = /^[A-Z]{2}[0-9]{4}-[0-9]{9}$/;
 
 function loadHistory() {
