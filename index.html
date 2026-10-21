@@ -21,15 +21,18 @@
   .range-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
   .range-options button { padding: 10px 4px; font-size: 14px; border: 1px solid #c9d7e8; color: #24415e; background: #f8fbff; }
   .range-options button.selected { background: #dcecff; border: 2px solid #0868d5; color: #064d9f; }
-  #cameraView { display: none; position: relative; width: 100%; margin-top: 14px; background: #000; border-radius: 12px; overflow: hidden; min-height: 180px; }
-  #reader { width: 100%; background: #000; overflow: hidden; min-height: 180px; }
-  #reader video { width: 100% !important; height: auto !important; object-fit: cover; }
-  #reader canvas { max-width: 100%; }
-  #scanGuide { position: absolute; z-index: 10; left: 50%; top: 50%; width: 82%; height: 90px; transform: translate(-50%, -50%); border: 2px solid rgba(255,255,255,.8); border-radius: 8px; pointer-events: none; box-shadow: 0 0 0 9999px rgba(0,0,0,.13); }
+  #cameraView { display: none; position: relative; width: 100%; aspect-ratio: 4 / 3; margin-top: 14px; background: #000; border-radius: 12px; overflow: hidden; }
+  #video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #000; }
+  #scanGuide { position: absolute; z-index: 10; left: 50%; top: 50%; width: 90%; height: 60px; transform: translate(-50%, -50%); border: 2px solid rgba(255,255,255,.85); border-radius: 8px; pointer-events: none; box-shadow: 0 0 0 9999px rgba(0,0,0,.18); }
   #scanGuide::after { content: ""; position: absolute; top: 50%; left: 0; right: 0; height: 3px; transform: translateY(-50%); background: #ff3030; box-shadow: 0 0 6px #ff0000; }
-  #guideLabel { position: absolute; z-index: 11; left: 50%; top: calc(50% + 55px); transform: translateX(-50%); white-space: nowrap; color: white; background: #000a; border-radius: 5px; padding: 3px 8px; font-size: 12px; pointer-events: none; }
+  #guideLabel { position: absolute; z-index: 11; left: 50%; top: calc(50% + 40px); transform: translateX(-50%); white-space: nowrap; color: white; background: #000a; border-radius: 5px; padding: 3px 8px; font-size: 12px; pointer-events: none; }
   .camera-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 9px; }
   .camera-buttons button { font-size: 14px; padding: 10px 6px; background: #e8eef5; color: #25364a; }
+  .zoom-row { display: none; align-items: center; gap: 10px; margin-top: 10px; font-size: 14px; color: #25364a; }
+  .zoom-row input { flex: 1; min-width: 0; }
+  #zoomValue { min-width: 3.2em; text-align: right; font-weight: 700; }
+  #photoBtn { display: none; margin-top: 10px; }
+  #camInfo { text-align: center; margin-top: 8px; }
   #status { text-align: center; margin-top: 12px; color: #555; min-height: 24px; line-height: 1.5; font-size: 14px; }
   #resultCard { display: none; }
   .ok { color: #16853a; background: #eaf8ef; border-radius: 10px; padding: 12px; text-align: center; font-weight: 700; }
@@ -44,7 +47,7 @@
 <header>Code 39 バーコード読取</header>
 <main>
   <div class="card">
-    <p class="notice">工程移動票のCode 39バーコードを読み取ります。<b>赤い線をバーコードの中央に合わせ、枠の中に1つだけ入れてください。</b></p>
+    <p class="notice">工程移動票のCode 39バーコードを読み取ります。<b>スマホを紙から20cmほど離し、赤い線をバーコードの中央に合わせてください。</b>枠の中には1つだけ入れてください。</p>
     <label class="setting-title">読み取り範囲</label>
     <div class="range-options" role="group" aria-label="読み取り範囲">
       <button type="button" data-range="narrow">狭い</button>
@@ -52,14 +55,17 @@
       <button type="button" data-range="wide">広い</button>
     </div>
     <button id="startBtn" style="margin-top:14px;">📷 カメラで読み取る</button>
-    <div id="cameraView"><div id="reader"></div><div id="scanGuide"></div><div id="guideLabel">バーコードを赤線に合わせる</div></div>
+    <div id="cameraView"><video id="video" playsinline muted autoplay></video><div id="scanGuide"></div><div id="guideLabel">バーコードを赤線に合わせる</div></div>
     <div class="camera-buttons" id="cameraButtons" style="display:none;">
       <button id="torchBtn" type="button" style="display:none;">🔦 ライトを点灯</button>
       <button id="refocusBtn" type="button">🎯 ピントを再調整</button>
     </div>
+    <div class="zoom-row" id="zoomRow"><span>🔍 ズーム</span><input type="range" id="zoomSlider" min="1" max="3" step="0.1" value="1"><span id="zoomValue">1.0x</span></div>
+    <button id="photoBtn" type="button" class="primary">📸 撮影して読み取る（高精度）</button>
     <button id="stopBtn" style="display:none;">カメラを停止</button>
-    <div id="status" aria-live="polite">バーコードが画面の横幅の8割ほどになる距離（15～25cm）で、ピントが合うまで1秒ほど止めてください</div>
-    <p class="footnote">※ 赤い枠は読み取り範囲の目安です。範囲内に別のバーコードを入れないでください。</p>
+    <div class="small" id="camInfo"></div>
+    <div id="status" aria-live="polite">スマホを紙から20cmほど離して構えてください。画面をタップするとピントを合わせ直します。</div>
+    <p class="footnote">※ 赤い枠は読み取り範囲です。範囲内に別のバーコードを入れないでください。</p>
   </div>
 
   <div id="resultCard" class="card">
@@ -77,35 +83,184 @@
   </div>
 </main>
 
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 'use strict';
-let scanner = null;
-let scanning = false;
-let selectedRange = 'standard';
-let candidateValue = '';
-let candidateCount = 0;
-let confirmed = false;
-let torchOn = false;
+// Code 39 自前デコーダー（ライブラリ不要）。
+// 1フレーム内の複数の走査線を、複数のしきい値・両方向で解読し、多数決で結果を決める。
+const CODE39_TABLE = {
+  '000110100':'0','100100001':'1','001100001':'2','101100000':'3','000110001':'4',
+  '100110000':'5','001110000':'6','000100101':'7','100100100':'8','001100100':'9',
+  '100001001':'A','001001001':'B','101001000':'C','000011001':'D','100011000':'E',
+  '001011000':'F','000001101':'G','100001100':'H','001001100':'I','000011100':'J',
+  '100000011':'K','001000011':'L','101000010':'M','000010011':'N','100010010':'O',
+  '001010010':'P','000000111':'Q','100000110':'R','001000110':'S','000010110':'T',
+  '110000001':'U','011000001':'V','111000000':'W','010010001':'X','110010000':'Y',
+  '011010000':'Z','010000101':'-','110000100':'.','011000100':' ','010010100':'*',
+  '010101000':'$','010100010':'/','010001010':'+','000101010':'%'
+};
 
-const reader = document.getElementById('reader');
-const cameraView = document.getElementById('cameraView');
-const scanGuide = document.getElementById('scanGuide');
-const guideLabel = document.getElementById('guideLabel');
-const statusEl = document.getElementById('status');
-const resultCard = document.getElementById('resultCard');
-const resultText = document.getElementById('resultText');
-const historyEl = document.getElementById('history');
-const startBtn = document.getElementById('startBtn');
-const stopBtn = document.getElementById('stopBtn');
-const cameraButtons = document.getElementById('cameraButtons');
-const torchBtn = document.getElementById('torchBtn');
-const refocusBtn = document.getElementById('refocusBtn');
+// 印刷のにじみでバーが太く・スペースが細くなっても読めるよう、バーとスペースを別々に太細判定する。
+// Code 39 は「太いバー2本＋太いスペース1本」または「太いバー0本＋太いスペース3本」のどちらか。
+function code39ClassifySplit(w) {
+  const bars = [0, 2, 4, 6, 8].sort((a, b) => w[b] - w[a]);
+  const spaces = [1, 3, 5, 7].sort((a, b) => w[b] - w[a]);
+  const key = ['0','0','0','0','0','0','0','0','0'];
+  if (w[bars[1]] >= w[bars[2]] * 1.25) {
+    key[bars[0]] = key[bars[1]] = '1';
+    if (w[spaces[0]] < w[spaces[1]] * 1.2) return null;
+    key[spaces[0]] = '1';
+  } else {
+    if (w[spaces[2]] < w[spaces[3]] * 1.2) return null;
+    key[spaces[0]] = key[spaces[1]] = key[spaces[2]] = '1';
+  }
+  return CODE39_TABLE[key.join('')] || null;
+}
 
-const RANGE_RATIO = { narrow: 0.80, standard: 0.92, wide: 0.98 };
-const CONFIRM_COUNT = 1; // 一致の回数。1＝形式（AA0000-000000000）に合った読取値が出た時点で即確定
+function code39Classify(w) {
+  const split = code39ClassifySplit(w);
+  if (split !== null) return split;
+  const idx = [0,1,2,3,4,5,6,7,8].sort((a, b) => w[b] - w[a]);
+  const wideMin = Math.min(w[idx[0]], w[idx[1]], w[idx[2]]);
+  const narrowMax = w[idx[3]];
+  if (wideMin < narrowMax * 1.2) return null;
+  const key = ['0','0','0','0','0','0','0','0','0'];
+  key[idx[0]] = key[idx[1]] = key[idx[2]] = '1';
+  return CODE39_TABLE[key.join('')] || null;
+}
+
+// runs: 黒から始まり黒で終わる連続幅の配列
+function code39DecodeRuns(runs) {
+  const n = runs.length;
+  for (let i = 0; i + 9 <= n; i += 2) {
+    let pos = i, out = '', ok = true;
+    for (;;) {
+      if (pos + 9 > n) { ok = false; break; }
+      const seg = runs.slice(pos, pos + 9);
+      const ch = code39Classify(seg);
+      if (ch === null) { ok = false; break; }
+      if (out.length === 0 && ch !== '*') { ok = false; break; }
+      out += ch;
+      pos += 9;
+      if (out.length > 1 && ch === '*') break;
+      if (pos >= n || out.length > 40) { ok = false; break; }
+      const sorted = seg.slice().sort((a, b) => a - b);
+      const narrowEst = (sorted[0] + sorted[1] + sorted[2] + sorted[3] + sorted[4] + sorted[5]) / 6;
+      if (runs[pos] > narrowEst * 3.4) { ok = false; break; }
+      pos += 1; // 文字間ギャップ
+    }
+    if (ok && out.length >= 3) return out.slice(1, -1);
+  }
+  return null;
+}
+
+// 1行の輝度(Uint8Array/配列)から runs を作る
+function code39RowToRuns(g, n, mode) {
+  const s = new Float32Array(n);
+  s[0] = g[0]; s[n - 1] = g[n - 1];
+  for (let i = 1; i < n - 1; i++) s[i] = (g[i - 1] + 2 * g[i] + g[i + 1]) / 4;
+  const hist = new Uint32Array(256);
+  for (let i = 0; i < n; i++) hist[g[i] | 0]++;
+  let acc = 0, p5 = 0, p95 = 255;
+  for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc >= n * 0.05) { p5 = v; break; } }
+  acc = 0;
+  for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc >= n * 0.95) { p95 = v; break; } }
+  const contrast = p95 - p5;
+  if (contrast < 30) return null;
+  const mid = (p5 + p95) / 2;
+  let thrAt;
+  if (mode === 'local') {
+    const hw = Math.max(30, Math.floor(n / 10));
+    const pre = new Float64Array(n + 1);
+    for (let i = 0; i < n; i++) pre[i + 1] = pre[i] + s[i];
+    thrAt = i => {
+      const a = Math.max(0, i - hw), b = Math.min(n, i + hw + 1);
+      return (pre[b] - pre[a]) / (b - a);
+    };
+  } else {
+    const t = mid + mode * contrast;
+    thrAt = () => t;
+  }
+  const runs = [];
+  let cur = s[0] < thrAt(0), len = 1;
+  const bits = [cur];
+  for (let i = 1; i < n; i++) {
+    const b = s[i] < thrAt(i);
+    if (b === cur) len++;
+    else { runs.push([cur, len]); cur = b; len = 1; }
+  }
+  runs.push([cur, len]);
+  // 先頭・末尾の白を除去して黒始まり黒終わりに
+  let a = 0, z = runs.length - 1;
+  while (a <= z && !runs[a][0]) a++;
+  while (z >= a && !runs[z][0]) z--;
+  if (z - a + 1 < 19) return null;
+  return runs.slice(a, z + 1).map(r => r[1]);
+}
+
+// gray: 輝度配列 (w*h)。返り値: {text, votes} または null
+function decodeCode39Gray(gray, w, h, opts) {
+  opts = opts || {};
+  const minVotes = opts.minVotes || 2;
+  const rows = opts.rows || 17;
+  const modes = [0, -0.1, 0.1, 'local'];
+  const votes = new Map();
+  const line = new Uint8Array(w);
+  for (let r = 0; r < rows; r++) {
+    const y = Math.round(h * (0.2 + 0.6 * (r + 0.5) / rows));
+    const y0 = Math.max(0, y - 1), y1 = Math.min(h - 1, y + 1);
+    for (let x = 0; x < w; x++) {
+      line[x] = (gray[y0 * w + x] + gray[y * w + x] + gray[y1 * w + x]) / 3;
+    }
+    for (const mode of modes) {
+      const runs = code39RowToRuns(line, w, mode);
+      if (!runs) continue;
+      const found = new Set();
+      const f1 = code39DecodeRuns(runs); if (f1) found.add(f1);
+      const f2 = code39DecodeRuns(runs.slice().reverse()); if (f2) found.add(f2);
+      found.forEach(t => votes.set(t, (votes.get(t) || 0) + 1));
+    }
+  }
+  let best = null, bestN = 0;
+  votes.forEach((n, t) => { if (n > bestN) { best = t; bestN = n; } });
+  return bestN >= minVotes ? { text: best, votes: bestN } : null;
+}
+
+if (typeof module !== 'undefined') module.exports = { code39RowToRuns, decodeCode39Gray, code39Classify, code39DecodeRuns, CODE39_TABLE };
+
+
+// ===== 設定値 =====
+const RANGE_RATIO = { narrow: 0.70, standard: 0.90, wide: 0.98 }; // 枠の幅（画面幅に対する割合）
+const GUIDE_H_RATIO = 0.26;     // 枠の高さ（画面高さに対する割合）。隣のバーコードを拾わない高さ
 const BARCODE_PATTERN = /^[A-Z]{2}[0-9]{4}-[0-9]{9}$/;
+const CONFIRM_COUNT = 1;        // 形式に合った値が何回出たら確定するか
+const DEFAULT_ZOOM = 2;         // 起動時のズーム倍率（対応端末のみ）
+const MAX_ROI_W = 1800;         // 解読に使う切り出し画像の最大幅(px)
+const FRAME_INTERVAL_MS = 50;   // 解読の間隔
+const AUTO_FOCUS_KICK_MS = 3000; // 読み取れない状態がこれだけ続いたらピントを自動で合わせ直す
 
+// ===== 状態 =====
+let stream = null, track = null, caps = {};
+let running = false, busy = false, confirmed = false, loopTimer = null;
+let detector = null;
+let selectedRange = 'standard';
+let zoomValue = 1, torchOn = false;
+let candidateValue = '', candidateCount = 0;
+let frameNo = 0, startedAt = 0, lastKick = 0, barPresent = false, lastMsgAt = 0;
+let guide = { W: 0, H: 0, gw: 0, gh: 0 };
+
+const $ = id => document.getElementById(id);
+const video = $('video'), cameraView = $('cameraView'), scanGuide = $('scanGuide'), guideLabel = $('guideLabel');
+const statusEl = $('status'), camInfo = $('camInfo');
+const resultCard = $('resultCard'), resultText = $('resultText'), historyEl = $('history');
+const startBtn = $('startBtn'), stopBtn = $('stopBtn'), cameraButtons = $('cameraButtons');
+const torchBtn = $('torchBtn'), refocusBtn = $('refocusBtn'), photoBtn = $('photoBtn');
+const zoomRow = $('zoomRow'), zoomSlider = $('zoomSlider'), zoomValueEl = $('zoomValue');
+const roiCanvas = document.createElement('canvas');
+const roiCtx = roiCanvas.getContext('2d', { willReadFrequently: true });
+const enhCanvas = document.createElement('canvas');
+const enhCtx = enhCanvas.getContext('2d');
+
+// ===== 履歴 =====
 function loadHistory() {
   let items = [];
   try { items = JSON.parse(localStorage.getItem('code39_history') || '[]'); } catch (e) { items = []; }
@@ -127,7 +282,6 @@ function loadHistory() {
     historyEl.appendChild(div);
   });
 }
-
 function saveValue(value) {
   let items = [];
   try { items = JSON.parse(localStorage.getItem('code39_history') || '[]'); } catch (e) { items = []; }
@@ -136,61 +290,209 @@ function saveValue(value) {
   loadHistory();
 }
 
-function resetCandidate() {
-  candidateValue = '';
-  candidateCount = 0;
+// ===== 枠・切り出し範囲 =====
+function updateRangeButtons() {
+  document.querySelectorAll('[data-range]').forEach(b => b.classList.toggle('selected', b.dataset.range === selectedRange));
+}
+function updateGuide() {
+  const W = cameraView.clientWidth, H = cameraView.clientHeight;
+  if (!W || !H) return;
+  const gw = Math.round(W * (RANGE_RATIO[selectedRange] || RANGE_RATIO.standard));
+  const gh = Math.round(H * GUIDE_H_RATIO);
+  guide = { W, H, gw, gh };
+  scanGuide.style.width = gw + 'px';
+  scanGuide.style.height = gh + 'px';
+  guideLabel.style.top = 'calc(50% + ' + (gh / 2 + 7) + 'px)';
+}
+// 画面上の赤枠に対応する、カメラ映像（元解像度）上の矩形
+function roiInVideo() {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw || !vh || !guide.W) return null;
+  const scale = Math.max(guide.W / vw, guide.H / vh);
+  const offX = (vw - guide.W / scale) / 2, offY = (vh - guide.H / scale) / 2;
+  const gx = (guide.W - guide.gw) / 2, gy = (guide.H - guide.gh) / 2;
+  return { x: offX + gx / scale, y: offY + gy / scale, w: guide.gw / scale, h: guide.gh / scale };
 }
 
-function updateRangeButtons() {
-  document.querySelectorAll('[data-range]').forEach(button => {
-    button.classList.toggle('selected', button.dataset.range === selectedRange);
+// ===== カメラ設定（ピント・ズーム・ライト）=====
+function buildCamSettings(extra) {
+  const s = {};
+  if (caps.focusMode && caps.focusMode.includes('continuous')) s.focusMode = 'continuous';
+  if (caps.zoom) s.zoom = zoomValue;
+  if (caps.torch !== undefined) s.torch = torchOn;
+  return Object.assign(s, extra || {});
+}
+async function applyCam(extra) {
+  if (!track) return false;
+  const s = buildCamSettings(extra);
+  try { await track.applyConstraints({ advanced: [s] }); return true; } catch (e) {}
+  // まとめて失敗した場合は1項目ずつ試す
+  let any = false;
+  for (const k of Object.keys(s)) {
+    try { await track.applyConstraints({ advanced: [{ [k]: s[k] }] }); any = true; } catch (e) {}
+  }
+  return any;
+}
+async function kickFocus() {
+  lastKick = performance.now();
+  const modes = caps.focusMode || [];
+  if (modes.includes('single-shot')) {
+    await applyCam({ focusMode: 'single-shot' });
+    setTimeout(() => { if (running) applyCam(); }, 900);
+  } else if (modes.includes('manual') && modes.includes('continuous')) {
+    await applyCam({ focusMode: 'manual' });
+    setTimeout(() => { if (running) applyCam(); }, 300);
+  }
+}
+
+// ===== 読み取り結果の処理 =====
+function normalize(t) { return String(t || '').trim().replace(/^\*|\*$/g, ''); }
+function say(msg) { statusEl.textContent = msg; lastMsgAt = performance.now(); }
+
+function handleRead(text) {
+  if (confirmed) return;
+  text = normalize(text);
+  if (!BARCODE_PATTERN.test(text)) {
+    candidateValue = ''; candidateCount = 0;
+    say('形式が一致しません（読取値: ' + text + '）。AA0000-000000000 の形式のバーコードだけを枠内に入れてください。');
+    return;
+  }
+  if (text === candidateValue) candidateCount++; else { candidateValue = text; candidateCount = 1; }
+  if (candidateCount >= CONFIRM_COUNT) finish(candidateValue);
+}
+function finish(value) {
+  confirmed = true;
+  try { if (navigator.vibrate) navigator.vibrate(80); } catch (e) {}
+  stopScan().then(() => {
+    resultText.textContent = value;
+    resultCard.style.display = 'block';
+    statusEl.textContent = '';
+    saveValue(value);
   });
 }
 
-function setGuideSize(width, height) {
-  scanGuide.style.width = width + 'px';
-  scanGuide.style.height = height + 'px';
-  guideLabel.style.top = 'calc(50% + ' + (height / 2 + 7) + 'px)';
+// ===== 解読 =====
+async function detectWith(source, cx, cy) {
+  const res = await detector.detect(source);
+  if (!res || !res.length) return null;
+  const c = res.map(r => {
+    const b = r.boundingBox || {};
+    const dx = (b.x || 0) + (b.width || 0) / 2 - cx, dy = (b.y || 0) + (b.height || 0) / 2 - cy;
+    return { text: normalize(r.rawValue), d: dx * dx + dy * dy };
+  }).sort((a, b) => a.d - b.d);
+  const ok = c.find(x => BARCODE_PATTERN.test(x.text));
+  return (ok || c[0]).text;
 }
 
-async function tryContinuousFocus() {
-  if (!scanner || !scanning || typeof scanner.applyVideoConstraints !== 'function') return;
-  try {
-    await scanner.applyVideoConstraints({ advanced: [{ focusMode: 'continuous' }] });
-    statusEl.textContent = 'カメラ起動中です。赤線に合わせてください。';
-  } catch (e) {
-    // Some Android phones/browser versions do not expose focus controls.
+async function processFrame() {
+  if (video.readyState < 2 || !video.videoWidth) return;
+  const roi = roiInVideo();
+  if (!roi) return;
+  const cw = Math.max(64, Math.min(Math.round(roi.w), MAX_ROI_W));
+  const sc = cw / roi.w;
+  const ch = Math.max(16, Math.round(roi.h * sc));
+  if (roiCanvas.width !== cw || roiCanvas.height !== ch) { roiCanvas.width = cw; roiCanvas.height = ch; }
+  roiCtx.drawImage(video, roi.x, roi.y, roi.w, roi.h, 0, 0, cw, ch);
+
+  const data = roiCtx.getImageData(0, 0, cw, ch).data;
+  const gray = new Uint8Array(cw * ch);
+  for (let i = 0, j = 0; i < gray.length; i++, j += 4) gray[i] = (data[j] * 77 + data[j + 1] * 150 + data[j + 2] * 29) >> 8;
+  // バーコードらしいコントラストが枠内にあるか（中央付近の数行を粗く確認）
+  let mn = 255, mx = 0;
+  const y0 = Math.floor(ch * 0.4), y1 = Math.ceil(ch * 0.6);
+  for (let y = y0; y < y1; y += 2) for (let x = 0; x < cw; x += 3) { const v = gray[y * cw + x]; if (v < mn) mn = v; if (v > mx) mx = v; }
+  barPresent = (mx - mn) > 60;
+
+  let found = null;
+  if (detector) {
+    try {
+      found = await detectWith(roiCanvas, cw / 2, ch / 2);
+      if (!found && frameNo % 2 === 1) {
+        enhCanvas.width = cw; enhCanvas.height = ch;
+        enhCtx.filter = 'grayscale(1) contrast(1.8)';
+        enhCtx.drawImage(roiCanvas, 0, 0);
+        found = await detectWith(enhCanvas, cw / 2, ch / 2);
+      }
+    } catch (e) { /* 検出失敗は無視して自前デコーダーへ */ }
   }
+  if (!found) {
+    const r = decodeCode39Gray(gray, cw, ch, { minVotes: 3 });
+    if (r) found = r.text;
+  }
+  if (found) handleRead(found);
 }
 
-async function updateTorchAvailability() {
-  torchBtn.style.display = 'none';
-  if (!scanner || typeof scanner.getRunningTrackCameraCapabilities !== 'function') return;
-  try {
-    const capabilities = scanner.getRunningTrackCameraCapabilities();
-    if (capabilities && capabilities.torch !== undefined) {
-      torchBtn.style.display = 'block';
-      torchBtn.textContent = torchOn ? '🔦 ライトを消灯' : '🔦 ライトを点灯';
+function hintIfStuck(now) {
+  if (now - lastMsgAt < 2500) return;
+  if (now - startedAt < 4000) return;
+  if (!barPresent) say('赤い枠の中にバーコードを入れてください。');
+  else say('読み取れない場合：ズームを少し上げる／ライトを切り替える／📸撮影して読み取る を試してください。');
+}
+
+function tick() {
+  if (!running) return;
+  const t0 = performance.now();
+  const next = () => { if (running) loopTimer = setTimeout(tick, Math.max(0, FRAME_INTERVAL_MS - (performance.now() - t0))); };
+  if (busy) { next(); return; }
+  frameNo++;
+  processFrame().catch(() => {}).then(() => {
+    const now = performance.now();
+    if (running && !confirmed) {
+      if (barPresent && now - Math.max(lastKick, startedAt) > AUTO_FOCUS_KICK_MS) kickFocus();
+      hintIfStuck(now);
     }
-  } catch (e) {}
+    next();
+  });
 }
 
-async function toggleTorch() {
-  if (!scanner || typeof scanner.applyVideoConstraints !== 'function') return;
-  const nextState = !torchOn;
+// ===== 撮影して読み取る（高解像度の静止画）=====
+async function photoScan() {
+  if (!running || !track || busy) return;
+  if (!('ImageCapture' in window) || !detector) { say('この端末・ブラウザでは撮影読み取りに対応していません。'); return; }
+  busy = true; photoBtn.disabled = true;
+  say('撮影しています… スマホを動かさないでください。');
   try {
-    await scanner.applyVideoConstraints({ advanced: [{ torch: nextState }] });
-    torchOn = nextState;
-    torchBtn.textContent = torchOn ? '🔦 ライトを消灯' : '🔦 ライトを点灯';
+    const ic = new ImageCapture(track);
+    let blob = null;
+    try {
+      const pc = await ic.getPhotoCapabilities();
+      const s = {};
+      if (pc.imageWidth && pc.imageHeight) {
+        const w = Math.min(pc.imageWidth.max, 4096), h = Math.min(pc.imageHeight.max, 3072);
+        s.imageWidth = Math.max(pc.imageWidth.min, w); s.imageHeight = Math.max(pc.imageHeight.min, h);
+      }
+      if (pc.fillLightMode && pc.fillLightMode.includes('off')) s.fillLightMode = 'off';
+      blob = await ic.takePhoto(s);
+    } catch (e) {
+      blob = await ic.takePhoto();
+    }
+    const bmp = await createImageBitmap(blob);
+    const text = await detectWith(bmp, bmp.width / 2, bmp.height / 2);
+    if (bmp.close) bmp.close();
+    if (text) { busy = false; handleRead(text); if (!confirmed) say('読み取り値の形式が一致しません: ' + text); return; }
+    say('撮影画像から読み取れませんでした。ピントが合ってから、もう一度押してください。');
   } catch (e) {
-    statusEl.textContent = 'このスマホではライトを操作できません。';
+    say('撮影に失敗しました。ライブ読み取りをお試しください。');
+  } finally {
+    busy = false; photoBtn.disabled = false;
   }
 }
+
+// ===== 開始・停止 =====
+async function attachStream(s) {
+  if (stream && stream !== s) stream.getTracks().forEach(t => t.stop());
+  stream = s;
+  video.srcObject = s;
+  await new Promise(res => { if (video.readyState >= 1 && video.videoWidth) res(); else video.onloadedmetadata = () => res(); });
+  try { await video.play(); } catch (e) {}
+  track = s.getVideoTracks()[0];
+}
+function shortSide() { return Math.min(video.videoWidth, video.videoHeight); }
 
 async function startScan() {
-  if (scanning) return;
-  if (typeof Html5Qrcode === 'undefined') {
-    statusEl.textContent = '読み取り機能を読み込めません。インターネット接続を確認してください。';
+  if (running) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    statusEl.textContent = 'このブラウザではカメラを使用できません。HTTPSで開いているか確認してください。';
     return;
   }
   resultCard.style.display = 'none';
@@ -198,131 +500,114 @@ async function startScan() {
   startBtn.style.display = 'none';
   stopBtn.style.display = 'block';
   cameraButtons.style.display = 'grid';
-  torchBtn.style.display = 'none';
-  torchOn = false;
-  resetCandidate();
-  confirmed = false;
+  torchBtn.style.display = 'none'; zoomRow.style.display = 'none'; photoBtn.style.display = 'none';
+  candidateValue = ''; candidateCount = 0; confirmed = false; torchOn = false; busy = false;
+  camInfo.textContent = '';
   statusEl.textContent = 'カメラを起動しています…';
-  scanner = new Html5Qrcode('reader', { verbose: false });
-  scanning = true;
+  updateGuide();
 
   try {
-    await scanner.start(
-      { facingMode: 'environment' },
-      {
-        fps: 20,
-        qrbox: (viewfinderWidth, viewfinderHeight) => {
-          const ratio = RANGE_RATIO[selectedRange] || RANGE_RATIO.standard;
-          const width = Math.max(160, Math.floor(Math.min(viewfinderWidth - 8, viewfinderWidth * ratio)));
-          const height = Math.max(80, Math.min(140, Math.floor(viewfinderHeight * 0.40)));
-          setGuideSize(width, height);
-          return { width, height };
-        },
-        formatsToSupport: [Html5QrcodeSupportedFormats.CODE_39],
-        // 対応ブラウザ（Android Chrome等）ではOS標準の高精度バーコード検出を使う
-        experimentalFeatures: { useBarCodeDetectorIfSupported: true },
-        // 細かいバーを読むため、高解像度で撮影する（既定は低解像度で読めない原因）
-        videoConstraints: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
-        },
-        disableFlip: true
-      },
-      decodedText => {
-        if (confirmed) return;
-        // Code 39 の読取結果に前後の空白や '*' が付く場合に備えて整形
-        decodedText = decodedText.trim().replace(/^\*|\*$/g, '');
-        if (!BARCODE_PATTERN.test(decodedText)) {
-          resetCandidate();
-          statusEl.textContent = '形式が一致しません（読取値: ' + decodedText + '）。AA0000-000000000 の形式のバーコードだけを枠内に入れてください。';
-          return;
-        }
-        if (decodedText === candidateValue) {
-          candidateCount += 1;
-        } else {
-          candidateValue = decodedText;
-          candidateCount = 1;
-        }
-        statusEl.textContent = '読み取り候補を確認中… ' + candidateCount + '/' + CONFIRM_COUNT + ' 回一致';
-        if (candidateCount >= CONFIRM_COUNT) {
-          confirmed = true;
-          const value = candidateValue;
-          stopScan().then(() => {
-            resultText.textContent = value;
-            resultCard.style.display = 'block';
-            statusEl.textContent = '';
-            saveValue(value);
-          });
-        }
-      },
-      () => { /* 途中の未検出メッセージは表示しません */ }
-    );
-    await tryContinuousFocus();
-    await updateTorchAvailability();
-    if (!statusEl.textContent || statusEl.textContent === 'カメラを起動しています…') {
-      statusEl.textContent = '赤い線をバーコードの中央に合わせてください。';
+    // 細い線を読むため、できるだけ高解像度で起動する（端末が対応する最大に近い解像度が選ばれる）
+    await attachStream(await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 }, frameRate: { ideal: 30 } },
+      audio: false
+    }));
+    // 縦向きで解像度が低く取得された場合は、縦横を入れ替えて再取得して大きい方を採用
+    if (shortSide() < 1400) {
+      try {
+        const s2 = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 2160 }, height: { ideal: 3840 }, frameRate: { ideal: 30 } },
+          audio: false
+        });
+        const prev = stream, prevShort = shortSide();
+        await attachStream(s2);
+        if (shortSide() < prevShort) await attachStream(await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false }));
+        else if (prev && prev !== stream) prev.getTracks().forEach(t => t.stop());
+      } catch (e) {}
     }
   } catch (e) {
-    scanning = false;
-    try { if (scanner) await scanner.clear(); } catch (err) {}
-    scanner = null;
-    cameraView.style.display = 'none';
-    cameraButtons.style.display = 'none';
-    startBtn.style.display = 'block';
-    stopBtn.style.display = 'none';
-    statusEl.textContent = 'カメラを使用できません。HTTPSで開いているか、ブラウザのカメラ使用が許可されているか確認してください。';
+    cameraView.style.display = 'none'; cameraButtons.style.display = 'none';
+    startBtn.style.display = 'block'; stopBtn.style.display = 'none';
+    const n = e && e.name;
+    statusEl.textContent =
+      n === 'NotAllowedError' ? 'カメラの使用が許可されていません。ブラウザの設定でカメラを許可してください。' :
+      n === 'NotFoundError' ? 'カメラが見つかりません。' :
+      n === 'NotReadableError' ? 'カメラを使用できません。他のアプリがカメラを使用していないか確認してください。' :
+      'カメラを起動できません。HTTPSで開いているか、ブラウザのカメラ許可を確認してください。';
+    return;
   }
+
+  caps = {};
+  try { caps = track.getCapabilities ? track.getCapabilities() : {}; } catch (e) {}
+  if (caps.zoom && caps.zoom.max > caps.zoom.min) {
+    zoomValue = Math.min(caps.zoom.max, Math.max(caps.zoom.min, DEFAULT_ZOOM));
+    zoomSlider.min = caps.zoom.min; zoomSlider.max = caps.zoom.max; zoomSlider.step = caps.zoom.step || 0.1;
+    zoomSlider.value = zoomValue; zoomValueEl.textContent = zoomValue.toFixed(1) + 'x';
+    zoomRow.style.display = 'flex';
+  } else { zoomValue = 1; }
+  if (caps.torch !== undefined) { torchBtn.style.display = 'block'; torchBtn.textContent = '🔦 ライトを点灯'; }
+  await applyCam();
+
+  detector = null;
+  if ('BarcodeDetector' in window) {
+    try {
+      const fm = await BarcodeDetector.getSupportedFormats();
+      if (fm.includes('code_39')) detector = new BarcodeDetector({ formats: ['code_39'] });
+    } catch (e) {}
+  }
+  if (detector && 'ImageCapture' in window) photoBtn.style.display = 'block';
+  camInfo.textContent = '映像 ' + video.videoWidth + '×' + video.videoHeight + (detector ? ' ／ 標準検出＋補助解読' : ' ／ 補助解読のみ');
+
+  updateGuide();
+  running = true; startedAt = performance.now(); lastKick = startedAt; frameNo = 0;
+  say('スマホを紙から20cmほど離し、赤い線をバーコードに合わせてください。');
+  tick();
 }
 
 async function stopScan() {
-  if (scanner && scanning) {
-    try { await scanner.stop(); } catch (e) {}
-    try { await scanner.clear(); } catch (e) {}
-  }
-  scanning = false;
-  scanner = null;
+  running = false;
+  clearTimeout(loopTimer);
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = null; track = null;
+  try { video.srcObject = null; } catch (e) {}
   cameraView.style.display = 'none';
   cameraButtons.style.display = 'none';
+  zoomRow.style.display = 'none'; photoBtn.style.display = 'none';
   startBtn.style.display = 'block';
   stopBtn.style.display = 'none';
   torchOn = false;
 }
 
-async function refocus() {
-  if (!scanner || !scanning || typeof scanner.applyVideoConstraints !== 'function') {
-    statusEl.textContent = 'カメラを起動してから操作してください。';
-    return;
-  }
-  try {
-    await scanner.applyVideoConstraints({ advanced: [{ focusMode: 'continuous' }] });
-    statusEl.textContent = 'ピント調整をリクエストしました。バーコードを少し動かして再度合わせてください。';
-  } catch (e) {
-    statusEl.textContent = 'このスマホでは手動のピント調整に対応していません。カメラを少し前後に動かしてみてください。';
-  }
-}
-
+// ===== イベント =====
 document.querySelectorAll('[data-range]').forEach(button => {
-  button.addEventListener('click', () => {
-    selectedRange = button.dataset.range;
-    updateRangeButtons();
-    if (scanning) statusEl.textContent = '範囲の変更は次回の読み取り開始時に反映されます。';
-  });
+  button.addEventListener('click', () => { selectedRange = button.dataset.range; updateRangeButtons(); updateGuide(); });
 });
 startBtn.addEventListener('click', startScan);
 stopBtn.addEventListener('click', stopScan);
-document.getElementById('againBtn').addEventListener('click', startScan);
-torchBtn.addEventListener('click', toggleTorch);
-refocusBtn.addEventListener('click', refocus);
-document.getElementById('clearHistoryBtn').addEventListener('click', () => {
+$('againBtn').addEventListener('click', startScan);
+photoBtn.addEventListener('click', photoScan);
+refocusBtn.addEventListener('click', () => { if (running) { say('ピントを合わせ直しています…'); kickFocus(); } });
+cameraView.addEventListener('click', () => { if (running) { say('ピントを合わせ直しています…'); kickFocus(); } });
+torchBtn.addEventListener('click', async () => {
+  torchOn = !torchOn;
+  const ok = await applyCam();
+  if (!ok) { torchOn = !torchOn; say('このスマホではライトを操作できません。'); return; }
+  torchBtn.textContent = torchOn ? '🔦 ライトを消灯' : '🔦 ライトを点灯';
+});
+zoomSlider.addEventListener('input', () => {
+  zoomValue = parseFloat(zoomSlider.value);
+  zoomValueEl.textContent = zoomValue.toFixed(1) + 'x';
+  applyCam();
+});
+window.addEventListener('resize', updateGuide);
+$('clearHistoryBtn').addEventListener('click', () => {
   if (confirm('このスマートフォンに保存された読み取り履歴をすべて削除しますか？')) {
     localStorage.removeItem('code39_history');
     loadHistory();
   }
 });
-window.addEventListener('pagehide', () => {
-  if (scanner && scanning) { try { scanner.stop(); } catch (e) {} }
-});
+document.addEventListener('visibilitychange', () => { if (document.hidden && running) stopScan(); });
+window.addEventListener('pagehide', () => { if (running) stopScan(); });
 loadHistory();
 </script>
 </body>
