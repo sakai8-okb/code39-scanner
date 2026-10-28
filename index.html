@@ -428,9 +428,9 @@ const MAX_ROI_W = 1800;          // 解読に使う切り出し画像の最大�
 const FRAME_INTERVAL_MS = 50;    // 解読の間隔
 const AUTO_FOCUS_KICK_MS = 3000; // 読めない状態がこれだけ続いたらピントを自動で合わせ直す
 // 案A：止まってから確定
-const STILL_MS = 350;            // この時間じっとしていたら確定してよい
-const STILL_DIFF = 0.06; // 映像の変化がこれ未満なら「止まっている」
-const MOVE_DIFF = 0.10;   // 映像の変化がこれ以上なら「動いている」
+const STILL_MS = 250;            // この時間じっとしていたら確定してよい
+const STILL_DIFF = 0.18; // 映像の変化がこれ未満なら「止まっている」
+const MOVE_DIFF = 0.25;   // 映像の変化がこれ以上なら「動いている」
 // 案B：赤線の位置のバーコードだけ採用
 const ALIGN_BAND = 0.34;         // バーコードの中心が、赤線から枠の高さのこの割合以内なら採用
 // 案C：2つ見えたら確定しない
@@ -645,8 +645,9 @@ function updateMotion(now) {
   const dt = Math.min(100, lastFrameAt ? now - lastFrameAt : FRAME_INTERVAL_MS);
   lastFrameAt = now;
   if (motionEma >= MOVE_DIFF) { moving = true; stillMs = 0; stillReads = []; }
-  else if (motionEma <= STILL_DIFF) { moving = false; stillMs += dt; }
+  else if (motionEma <= STILL_DIFF) { moving = false; if (now - startedAt > 600) stillMs += dt; }
   window.__dbg.motion = motionEma;
+  const ci = $('camInfo'); if (ci && now - startedAt > 1000) ci.textContent = (detector ? '標準＋補助' : '補助のみ') + '　ゆれ ' + motionEma.toFixed(2) + '（' + STILL_DIFF + '以下で停止／' + MOVE_DIFF + '以上で移動）';
 }
 
 function drawMarks(list) {
@@ -664,7 +665,7 @@ function drawMarks(list) {
 function onRead(text) {
   if (confirmed) return;
   if (!BARCODE_PATTERN.test(text)) { say('形式が一致しません（読取値: ' + text + '）'); return; }
-  if (!moving) stillReads.push(text);   // 案A：動いている間の読み取りは数えない
+  if (!moving && performance.now() - startedAt > 600) stillReads.push(text);   // 案A：動いている間の読み取りは数えない
 }
 
 async function processFrame(now) {
@@ -756,7 +757,8 @@ async function processFrame(now) {
 function checkConfirm(now) {
   if (confirmed || busy) return;
   if (now < ambiguousUntil) { stillReads = []; return; }
-  if (stillMs >= STILL_MS && stillReads.length >= 1) {
+  // じっとしている、または大きく動いていないのに同じ値が2回以上読めている場合は確定
+  if ((stillMs >= STILL_MS && stillReads.length >= 1) || (!moving && stillReads.length >= 2)) {
     const uniq = Array.from(new Set(stillReads));
     if (uniq.length === 1) finish(uniq[0]);
     else { stillReads = []; say('ほかのバーコードが混ざっています。1つだけ赤線に合わせてください。'); }
